@@ -36,7 +36,10 @@ def get_shop():
         headers["x-api-key"] = key
     r = requests.get(API_URL, params={"language": "es-419"}, headers=headers, timeout=30)
     r.raise_for_status()
-    return r.json()
+    data = r.json()
+print("RESPUESTA API:")
+print(data)
+return data
 
 def get_items(data):
     # Fortnite-API has used different response shapes over time.
