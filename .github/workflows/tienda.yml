@@ -1,0 +1,31 @@
+name: Generar tienda Fortnite
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *"
+
+jobs:
+  generar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar archivos
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Generar tienda
+        run: python generar_tienda.py
+
+      - name: Guardar resultado
+        uses: actions/upload-artifact@v4
+        with:
+          name: tienda-fortnite
+          path: salida/
