@@ -193,7 +193,7 @@ def get_items(data):
             seen.add(k)
             result.append(item)
 
-    return result
+    return result 
 
 
 def make_page(
