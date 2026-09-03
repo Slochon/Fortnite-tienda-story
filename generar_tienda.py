@@ -39,7 +39,7 @@ def get_shop():
     data = r.json()
 print("RESPUESTA API:")
 print(data)
-return data
+return data 
 
 def get_items(data):
     # Fortnite-API has used different response shapes over time.
