@@ -4,83 +4,90 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 
 API_URL = "https://fortnite-api.com/v2/shop"
-
 OUTPUT_DIR = "salida"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "tienda.png")
-
 BACKGROUND_FILE = "background.png"
 
 
-def descargar_imagen(url):
-    try:
-        respuesta = requests.get(url, timeout=30)
-        respuesta.raise_for_status()
-        return Image.open(io.BytesIO(respuesta.content)).convert("RGBA")
-    except Exception as e:
-        print(f"No se pudo descargar la imagen: {e}")
-        return None
-
-
 def obtener_fuente(tamano, negrita=False):
-    posibles = []
-
     if negrita:
-        posibles = [
+        rutas = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
         ]
     else:
-        posibles = [
+        rutas = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         ]
 
-    for ruta in posibles:
+    for ruta in rutas:
         if os.path.exists(ruta):
             return ImageFont.truetype(ruta, tamano)
 
     return ImageFont.load_default()
 
 
+def descargar_imagen(url):
+    if not url:
+        return None
+
+    try:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        return Image.open(io.BytesIO(r.content)).convert("RGBA")
+    except Exception as e:
+        print("No se pudo descargar una imagen:", e)
+        return None
+
+
 def obtener_tienda():
-    print("Consultando la tienda de Fortnite...")
+    print("Consultando Fortnite-API...")
 
-    respuesta = requests.get(API_URL, timeout=30)
-    respuesta.raise_for_status()
+    r = requests.get(API_URL, timeout=30)
+    r.raise_for_status()
 
-    datos = respuesta.json()
+    respuesta = r.json()
 
-    if not isinstance(datos, dict):
-        raise RuntimeError("La respuesta de la API no es un objeto JSON válido.")
+    data = respuesta.get("data")
 
-    tienda = datos.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError("La API no devolvió un objeto 'data' válido.")
 
-    if not isinstance(tienda, dict):
-        raise RuntimeError("La respuesta no contiene 'data' correctamente.")
+    entries = data.get("entries")
 
-    entradas = tienda.get("entries")
+    if not isinstance(entries, list):
+        raise RuntimeError("La API no devolvió una lista 'entries' válida.")
 
-    if not isinstance(entradas, list):
-        raise RuntimeError("La respuesta no contiene 'entries' correctamente.")
+    print("Entradas recibidas:", len(entries))
 
-    print(f"Entradas encontradas: {len(entradas)}")
-
-    return entradas
-
-
-def obtener_objetos(entradas):
+    return entries
+def obtener_objetos(entries):
     objetos = []
 
-    for entrada in entradas:
-        if not isinstance(entrada, dict):
+    for entry in entries:
+        if not isinstance(entry, dict):
             continue
 
-        precio = entrada.get("finalPrice")
-
-        items = entrada.get("brItems")
+        precio = entry.get("finalPrice")
+        items = entry.get("brItems")
 
         if not isinstance(items, list):
             continue
+
+        imagen_url = None
+
+        asset = entry.get("newDisplayAsset")
+
+        if isinstance(asset, dict):
+            renders = asset.get("renderImages")
+
+            if isinstance(renders, list):
+                for render in renders:
+                    if isinstance(render, dict):
+                        imagen_url = render.get("image")
+                        if imagen_url:
+                            break
 
         for item in items:
             if not isinstance(item, dict):
@@ -93,76 +100,89 @@ def obtener_objetos(entradas):
                 or "Objeto"
             )
 
-            imagen_url = None
+            item_imagen = None
+            images = item.get("images")
 
-            asset = entrada.get("newDisplayAsset")
+            if isinstance(images, dict):
+                item_imagen = (
+                    images.get("featured")
+                    or images.get("icon")
+                    or images.get("background")
+                )
 
-            if isinstance(asset, dict):
-                renders = asset.get("renderImages")
+            objetos.append({
+                "nombre": nombre,
+                "precio": precio,
+                "imagen": imagen_url or item_imagen,
+            })
 
-                if isinstance(renders, list) and renders:
-                    primero = renders[0]
+    print("Objetos encontrados:", len(objetos))
 
-                    if isinstance(primero, dict):
-                        imagen_url = primero.get("image")
+    return objetos
 
-            if not imagen_url:
-                imagen_url = item.get("images", {}).get("icon")
 
-            if not imagen_url:
-                imagen_url = item.get("images", {}).get("featured")
+def cargar_fondo():
+    if os.path.exists(BACKGROUND_FILE):
+        try:
+            return Image.open(BACKGROUND_FILE).convert("RGBA")
+        except Exception as e:
+            print("No se pudo abrir background.png:", e)
+
+    print("No se encontró background.png. Se utilizará un fondo básico.")
+
+    return Image.new(
+        "RGBA",
+        (1920, 1080),
+        (25, 25, 35, 255),
+    )
+
+
 def crear_tienda(objetos):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    if os.path.exists(BACKGROUND_FILE):
-        fondo = Image.open(BACKGROUND_FILE).convert("RGBA")
-    else:
-        fondo = Image.new("RGBA", (1920, 1080), (25, 25, 35, 255))
-
+    fondo = cargar_fondo()
     ancho, alto = fondo.size
 
-    # Dejamos un margen para que la tienda quede ordenada.
     margen = 50
     columnas = 4
     filas = 2
 
-    espacio_x = 25
-    espacio_y = 25
+    separacion_x = 25
+    separacion_y = 25
 
     ancho_tarjeta = (
-        ancho - (margen * 2) - (espacio_x * (columnas - 1))
+        ancho
+        - margen * 2
+        - separacion_x * (columnas - 1)
     ) // columnas
 
     alto_tarjeta = (
-        alto - (margen * 2) - (espacio_y * (filas - 1))
+        alto
+        - margen * 2
+        - separacion_y * (filas - 1)
     ) // filas
 
-    fuente_nombre = obtener_fuente(28, True)
-    fuente_precio = obtener_fuente(26, True)
+    fuente_nombre = obtener_fuente(26, True)
+    fuente_precio = obtener_fuente(24, True)
 
-    # Limitamos a 8 objetos para mantener el diseño limpio.
     objetos = objetos[:8]
 
     for indice, objeto in enumerate(objetos):
         fila = indice // columnas
         columna = indice % columnas
 
-        x = margen + columna * (ancho_tarjeta + espacio_x)
-        y = margen + fila * (alto_tarjeta + espacio_y)
+        x = margen + columna * (ancho_tarjeta + separacion_x)
+        y = margen + fila * (alto_tarjeta + separacion_y)
 
         tarjeta = Image.new(
             "RGBA",
             (ancho_tarjeta, alto_tarjeta),
-            (20, 20, 30, 230),
+            (15, 15, 25, 235),
         )
 
         draw = ImageDraw.Draw(tarjeta)
 
-        # Imagen del cosmético.
-        imagen = None
-
-        if objeto.get("imagen"):
-            imagen = descargar_imagen(objeto["imagen"])
+        imagen = descargar_imagen(objeto.get("imagen"))
 
         if imagen:
             imagen.thumbnail(
@@ -173,49 +193,54 @@ def crear_tienda(objetos):
                 Image.Resampling.LANCZOS,
             )
 
-            ix = (ancho_tarjeta - imagen.width) // 2
-            iy = 15
+            imagen_x = (ancho_tarjeta - imagen.width) // 2
+            imagen_y = 15
 
-            tarjeta.alpha_composite(imagen, (ix, iy))
+            tarjeta.alpha_composite(
+                imagen,
+                (imagen_x, imagen_y),
+            )
 
-        # Nombre.
         nombre = str(objeto.get("nombre", "Objeto"))
 
-        # Evitamos nombres demasiado largos.
-        if len(nombre) > 28:
-            nombre = nombre[:25] + "..."
+        if len(nombre) > 26:
+            nombre = nombre[:23] + "..."
 
-        bbox = draw.textbbox((0, 0), nombre, font=fuente_nombre)
-        texto_ancho = bbox[2] - bbox[0]
+        caja = draw.textbbox(
+            (0, 0),
+            nombre,
+            font=fuente_nombre,
+        )
+
+        texto_ancho = caja[2] - caja[0]
 
         draw.text(
             (
                 (ancho_tarjeta - texto_ancho) // 2,
-                alto_tarjeta - 85,
+                alto_tarjeta - 80,
             ),
             nombre,
             font=fuente_nombre,
             fill="white",
         )
 
-        # Precio.
         precio = objeto.get("precio")
 
         if precio is not None:
             texto_precio = f"{precio} V-Bucks"
 
-            bbox = draw.textbbox(
+            caja = draw.textbbox(
                 (0, 0),
                 texto_precio,
                 font=fuente_precio,
             )
 
-            precio_ancho = bbox[2] - bbox[0]
+            precio_ancho = caja[2] - caja[0]
 
             draw.text(
                 (
                     (ancho_tarjeta - precio_ancho) // 2,
-                    alto_tarjeta - 48,
+                    alto_tarjeta - 45,
                 ),
                 texto_precio,
                 font=fuente_precio,
@@ -230,45 +255,19 @@ def crear_tienda(objetos):
         optimize=True,
     )
 
-    print(f"Tienda creada correctamente: {OUTPUT_FILE}")
-
-
+    print("Tienda creada correctamente.")
+    print("Archivo:", OUTPUT_FILE)
 def main():
-    try:
-        entradas = obtener_tienda()
-        objetos = obtener_objetos(entradas)
+    entries = obtener_tienda()
+    objetos = obtener_objetos(entries)
 
-        if not objetos:
-            raise RuntimeError(
-                "No se encontraron objetos en la respuesta de la tienda."
-            )
-
-        crear_tienda(objetos)
-
-    except requests.RequestException as e:
+    if not objetos:
         raise RuntimeError(
-            f"Error al conectar con Fortnite-API: {e}"
-        ) from e
+            "No se encontraron objetos en la respuesta de la tienda."
+        )
+
+    crear_tienda(objetos)
 
 
 if __name__ == "__main__":
     main()
-            objetos.append({
-                "nombre": nombre,
-                "precio": precio,
-                "imagen": imagen_url,
-            })
-
-    print(f"Objetos encontrados: {len(objetos)}")
-
-    return objetos
-
-
-def cargar_fondo():
-    if os.path.exists(BACKGROUND_FILE):
-        try:
-            return Image.open(BACKGROUND_FILE).convert("RGBA")
-        except Exception:
-            pass
-
-    return Image.new("RGBA", (1920, 1080), (25, 25, 35, 255))
