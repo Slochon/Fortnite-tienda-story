@@ -363,8 +363,12 @@ def main():
 
     items = get_items(data)
 
-    if not items:
-        raise RuntimeError(
+    if not items: 
+
+print("RESPUESTA COMPLETA DE LA API:")
+print(json.dumps(data, indent=2, ensure_ascii=False))
+
+       raise RuntimeError(
             "No se encontraron objetos en la respuesta de la tienda."
         )
 
