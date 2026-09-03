@@ -1,0 +1,150 @@
+import os
+import html
+import requests
+
+API = "https://fortnite-api.com/v2/shop?language=es-419"
+OUT = "salida/index.html"
+
+r = requests.get(API, timeout=30)
+r.raise_for_status()
+data = r.json()
+
+data = data.get("data", data)
+
+if isinstance(data, dict):
+    ofertas = data.get("entries") or data.get("shop") or data.get("offers") or []
+else:
+    ofertas = data if isinstance(data, list) else []
+
+print("Ofertas encontradas:", len(ofertas))
+
+items = []
+vistos = set()
+
+for oferta in ofertas:
+    if not isinstance(oferta, dict):
+        continue
+
+    posibles = (
+        oferta.get("brItems")
+        or oferta.get("items")
+        or oferta.get("itemGrants")
+        or []
+    )
+
+    if isinstance(posibles, dict):
+        posibles = [posibles]
+
+    item = posibles[0] if posibles else {}
+
+    nombre = (
+        item.get("name")
+        or item.get("displayName")
+        or oferta.get("name")
+        or oferta.get("displayName")
+        or "Objeto"
+    )
+
+    imagenes = item.get("images", {})
+    imagen = ""
+
+    if isinstance(imagenes, dict):
+        imagen = (
+            imagenes.get("featured")
+            or imagenes.get("icon")
+            or imagenes.get("smallIcon")
+            or ""
+        )
+
+    imagen = (
+        imagen
+        or item.get("featuredImage")
+        or item.get("icon")
+        or item.get("image")
+        or ""
+    )
+
+    precio = oferta.get("finalPrice", 0)
+
+    if isinstance(precio, dict):
+        precio = precio.get("finalPrice", 0)
+
+    if not imagen or not isinstance(imagen, str):
+        continue
+
+    clave = (nombre, imagen)
+
+    if clave in vistos:
+        continue
+
+    vistos.add(clave)
+
+    items.append((nombre, imagen, precio))
+
+print("Objetos con imagen:", len(items))
+
+if not items:
+    raise RuntimeError("No se encontraron objetos con imagen.")
+
+tarjetas = []
+
+for nombre, imagen, precio in items:
+    nombre = html.escape(str(nombre))
+    imagen = html.escape(str(imagen), quote=True)
+
+    if precio:
+        precio = f"{int(precio):,}".replace(",", ".")
+        precio_html = "V " + precio
+    else:
+        precio_html = "GRATIS"
+
+    tarjeta = (
+        '<article class="card">'
+        '<img src="' + imagen + '" alt="' + nombre + '">'
+        '<div class="nombre">' + nombre + '</div>'
+        '<div class="precio">' + precio_html + '</div>'
+        '</article>'
+    )
+
+    tarjetas.append(tarjeta)
+
+css = """
+body{margin:0;background:#080a16;color:white;font-family:Arial,sans-serif}
+header{text-align:center;padding:25px;background:#11152b;position:sticky;top:0}
+h1{margin:0;font-size:30px;font-style:italic}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px}
+.card{background:#202542;border-radius:14px;overflow:hidden}
+.card img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+.nombre{padding:8px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.precio{padding:0 8px 10px;font-weight:bold;font-size:16px}
+@media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1100px){.grid{grid-template-columns:repeat(4,1fr)}}
+"""
+
+pagina = (
+    "<!DOCTYPE html>"
+    '<html lang="es"><head>'
+    '<meta charset="UTF-8">'
+    '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    "<title>Tienda Fortnite</title>"
+    "<style>" + css + "</style>"
+    "</head><body>"
+    "<header><h1>TIENDA DE FORTNITE</h1>"
+    "<div>Objetos disponibles hoy</div></header>"
+    '<main class="grid">'
+    + "".join(tarjetas)
+    + "</main></body></html>"
+)
+
+os.makedirs("salida", exist_ok=True)
+
+for archivo in os.listdir("salida"):
+    ruta = os.path.join("salida", archivo)
+    if os.path.isfile(ruta):
+        os.remove(ruta)
+
+with open(OUT, "w", encoding="utf-8") as f:
+    f.write(pagina)
+
+print("OK: HTML GENERADO")
+print("Archivo:", OUT)
