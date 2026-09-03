@@ -29,7 +29,7 @@ def fit_crop(im, size):
     left, top = (nw-size[0])//2, (nh-size[1])//2
     return im.crop((left, top, left+size[0], top+size[1]))
 
-def get_shop():
+f get_shop():
     headers = {}
     key = os.getenv("FORTNITE_API_KEY")
     if key:
