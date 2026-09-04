@@ -5,6 +5,11 @@ on:
   schedule:
     - cron: "0 12 * * *"
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   generar:
     runs-on: ubuntu-latest
@@ -26,8 +31,23 @@ jobs:
       - name: Generar tienda
         run: python generar_tienda.py
 
-      - name: Guardar resultado
-        uses: actions/upload-artifact@v4
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir página
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: tienda-fortnite
-          path: salida/
+          path: salida
+
+  publicar:
+    needs: generar
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Publicar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
