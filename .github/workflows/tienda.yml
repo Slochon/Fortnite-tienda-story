@@ -70,7 +70,6 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: salida
-
   publicar:
     needs: generar
     runs-on: ubuntu-latest
